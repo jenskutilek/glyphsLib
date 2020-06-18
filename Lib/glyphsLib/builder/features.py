@@ -95,7 +95,7 @@ def _to_ufo_features(font, ufo=None, generate_GDEF=False, skip_export_glyphs=Non
                 # Replace special chars backslash and doublequote for AFDKO syntax
                 name = name.replace("\x5c", r"\005c")
                 name = name.replace('"', r"\0022")
-                lines.extend(["featureNames {", '  name "%s";' % name, "};"])
+                lines.extend(["featureNames {", f'  name "{name}";', "};"])
         if feature.automatic:
             lines.append("# automatic")
         if feature.disabled:
