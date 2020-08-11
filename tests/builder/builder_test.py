@@ -1024,9 +1024,7 @@ class ToUfosTestBase(ParametrizedUfoModuleTestMixin):
             font.features[0].notes = note
             ufos = self.to_ufos(font)
             ufo = ufos[0]
-            self.assertIn(
-                r'name "Single\005cstorey \0022ä\0022";', ufo.features.text
-            )
+            self.assertIn(r'name "Single\005cstorey \0022ä\0022";', ufo.features.text)
         # Name should not be exported when not in first line
         for note in (
             'A Comment\nName: Single\\storey "ä"\nFoo',
