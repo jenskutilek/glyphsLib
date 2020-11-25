@@ -93,9 +93,7 @@ def _to_ufo_features(font, ufo=None, generate_GDEF=False, skip_export_glyphs=Non
             if feature_name:
                 name = feature_name.groups()[-1]
                 lines.append("# notes:")
-                lines.extend(
-                    "# " + line for line in feature.notes.splitlines()
-                )
+                lines.extend("# " + line for line in feature.notes.splitlines())
                 lines.extend(name.splitlines())
             else:
                 feature_name = re.search(r"^(Name: (.+))", feature.notes)
@@ -117,9 +115,7 @@ def _to_ufo_features(font, ufo=None, generate_GDEF=False, skip_export_glyphs=Non
                     lines.extend(["featureNames {", f'  name "{name}";', "};"])
                 else:
                     lines.append("# notes:")
-                    lines.extend(
-                        "# " + line for line in feature.notes.splitlines()
-                    )
+                    lines.extend("# " + line for line in feature.notes.splitlines())
         if feature.automatic:
             lines.append("# automatic")
         if feature.disabled:
