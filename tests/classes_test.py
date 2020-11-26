@@ -37,8 +37,10 @@ from glyphsLib.classes import (
     GSGuideLine,
     GSHint,
     GSNode,
+    GSPath,
     GSSmartComponentAxis,
     GSBackgroundImage,
+    segment,
     LayerComponentsProxy,
     LayerGuideLinesProxy,
     STEM,
@@ -1534,6 +1536,29 @@ class GSPathFromFileTest(GSObjectsTestCase):
     # TODO:
     # addNodesAtExtremes()
     # applyTransform()
+    def test_applyTransform_translate(self):
+        pathCopy = copy.copy(self.path)
+        pathCopy.applyTransform((1, 0, 0, 1, 50, 25))
+        expected = ((402, 172), (402, 93), (364, 32), (262, 32))
+        for i, pt in enumerate(expected):
+            self.assertEqual(pathCopy.nodes[i].position.x, pt[0])
+            self.assertEqual(pathCopy.nodes[i].position.y, pt[1])
+
+    def test_applyTransform_translate_scale(self):
+        pathCopy = copy.copy(self.path)
+        pathCopy.applyTransform((0.9, 0, 0, 1.2, 50, 25))
+        expected = ((367, 201), (367, 107), (333, 33), (241, 33))
+        for i, pt in enumerate(expected):
+            self.assertAlmostEqual(pathCopy.nodes[i].position.x, pt[0], 0)
+            self.assertAlmostEqual(pathCopy.nodes[i].position.y, pt[1], 0)
+
+    def test_applyTransform_skew(self):
+        pathCopy = copy.copy(self.path)
+        pathCopy.applyTransform((1, 0.1, 0.2, 1, 0, 0))
+        expected = ((381, 182), (366, 103), (315, 38), (213, 28))
+        for i, pt in enumerate(expected):
+            self.assertAlmostEqual(pathCopy.nodes[i].position.x, pt[0], 0)
+            self.assertAlmostEqual(pathCopy.nodes[i].position.y, pt[1], 0)
 
     def test_direction(self):
         self.assertEqual(self.path.direction, -1)
@@ -1544,6 +1569,24 @@ class GSPathFromFileTest(GSObjectsTestCase):
         self.path.reverse()
         self.assertEqual(len(self.path.segments), 20)
         self.assertEqual(oldSegments[0].nodes[0], self.path.segments[0].nodes[0])
+
+    def test_segments_2(self):
+        p = GSPath()
+        p.nodes = [
+            GSNode((204,354),"curve"),
+            GSNode((198,353),"offcurve"),
+            GSNode((193,352),"offcurve"),
+            GSNode((183,352),"curve"),
+            GSNode((154,352),"offcurve"),
+            GSNode((123,364),"offcurve"),
+            GSNode((123,384),"curve"),
+            GSNode((123,403),"offcurve"),
+            GSNode((148,419),"offcurve"),
+            GSNode((167,419),"curve"),
+            GSNode((190,419),"offcurve"),
+            GSNode((204,397),"offcurve"),
+        ]
+        self.assertEqual(len(p.segments), 4)
 
     def test_bounds(self):
         bounds = self.path.bounds
@@ -1693,6 +1736,18 @@ class GSBackgroundLayerTest(unittest.TestCase):
             self.bg.foreground = GSLayer()
 
 
+class segmentTest(unittest.TestCase):
+    def test_bbox_bug(self):
+        seg = segment(
+            [Point(529, 223), Point(447, 456), Point(285, 177), Point(521, 367)]
+        )
+        bbox = seg.bbox()
+        self.assertAlmostEqual(bbox[0], 398.1222655016518)
+        self.assertAlmostEqual(bbox[1], 223)
+        self.assertAlmostEqual(bbox[2], 529)
+        self.assertAlmostEqual(bbox[3], 367)
+
+
 class FontGlyphsProxyTest(unittest.TestCase):
     def setUp(self):
         self.font = GSFont(TESTFILE_PATH)
@@ -1711,6 +1766,24 @@ class FontGlyphsProxyTest(unittest.TestCase):
 
         with pytest.raises(KeyError):
             del self.font.glyphs[self.font]
+
+
+class FontClassesProxyTest(unittest.TestCase):
+    def setUp(self):
+        self.font = GSFont(TESTFILE_PATH)
+
+    def test_indxing_by_name(self):
+        assert "Languagesystems" in self.font.featurePrefixes
+        assert "c2sc_source" in self.font.classes
+        assert "aalt" in self.font.features
+
+        assert "XXXX" not in self.font.featurePrefixes
+        assert "XXXX" not in self.font.classes
+        assert "XXXX" not in self.font.features
+
+        assert self.font.featurePrefixes["Languagesystems"] in self.font.featurePrefixes
+        assert self.font.classes["c2sc_source"] in self.font.classes
+        assert self.font.features["aalt"] in self.font.features
 
 
 if __name__ == "__main__":

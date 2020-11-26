@@ -686,6 +686,8 @@ class FontGlyphsProxy(Proxy):
 
 
 class FontClassesProxy(Proxy):
+    VALUES_ATTR = "_classes"
+
     def __getitem__(self, key):
         if isinstance(key, (slice, int)):
             return self.values().__getitem__(key)
@@ -715,7 +717,13 @@ class FontClassesProxy(Proxy):
                 if klass.name == key:
                     del self.values()[index]
 
-    # FIXME: (jany) def __contains__
+    def __contains__(self, item):
+        if isinstance(item, str):
+            for klass in self.values():
+                if klass.name == item:
+                    return True
+            return False
+        return item in self.values()
 
     def append(self, item):
         self.values().append(item)
@@ -734,14 +742,22 @@ class FontClassesProxy(Proxy):
         self.values().remove(item)
 
     def values(self):
-        return self._owner._classes
+        return getattr(self._owner, self.VALUES_ATTR)
 
     def setter(self, values):
         if isinstance(values, Proxy):
             values = list(values)
-        self._owner._classes = values
+        setattr(self._owner, self.VALUES_ATTR, values)
         for value in values:
             value._parent = self._owner
+
+
+class FontFeaturesProxy(FontClassesProxy):
+    VALUES_ATTR = "_features"
+
+
+class FontFeaturePrefixesProxy(FontClassesProxy):
+    VALUES_ATTR = "_featurePrefixes"
 
 
 class GlyphLayerProxy(Proxy):
@@ -1812,23 +1828,39 @@ class GSPath(GSBase):
 
         nodeCount = 0
         segmentCount = 0
-        while nodeCount < len(self.nodes):
+        nodes = list(self.nodes)
+        # Cycle node list until curve or line at end
+        cycled = False
+        for i, n in enumerate(nodes):
+            if n.type == "offcurve" or n.type == "line":
+                nodes = nodes[i:] + nodes[:i]
+                cycled = True
+                break
+        if not cycled:
+            return []
+
+        def wrap(i):
+            if i >= len(nodes):
+                i = i % len(nodes)
+            return i
+
+        while nodeCount < len(nodes):
             newSegment = segment()
             newSegment.parent = self
             newSegment.index = segmentCount
 
             if nodeCount == 0:
-                newSegment.appendNode(self.nodes[-1])
+                newSegment.appendNode(nodes[-1])
             else:
-                newSegment.appendNode(self.nodes[nodeCount - 1])
+                newSegment.appendNode(nodes[nodeCount - 1])
 
-            if self.nodes[nodeCount].type == "offcurve":
-                newSegment.appendNode(self.nodes[nodeCount])
-                newSegment.appendNode(self.nodes[nodeCount + 1])
-                newSegment.appendNode(self.nodes[nodeCount + 2])
+            if nodes[nodeCount].type == "offcurve":
+                newSegment.appendNode(nodes[nodeCount])
+                newSegment.appendNode(nodes[wrap(nodeCount + 1)])
+                newSegment.appendNode(nodes[wrap(nodeCount + 2)])
                 nodeCount += 3
-            elif self.nodes[nodeCount].type == "line":
-                newSegment.appendNode(self.nodes[nodeCount])
+            elif nodes[nodeCount].type == "line":
+                newSegment.appendNode(nodes[nodeCount])
                 nodeCount += 1
 
             self._segments.append(newSegment)
@@ -1919,19 +1951,15 @@ class GSPath(GSBase):
 
     # TODO
     def applyTransform(self, transformationMatrix):
-        raise NotImplementedError
-
-        # Using both skew values (>0.0) produces different results than Glyphs.
-        # Skewing just on of the two works.
-        # Needs more attention.
         assert len(transformationMatrix) == 6
         for node in self.nodes:
-            transformation = (
-                Affine.translation(transformationMatrix[4], transformationMatrix[5])
-                * Affine.scale(transformationMatrix[0], transformationMatrix[3])
-                * Affine.shear(
-                    transformationMatrix[2] * 45.0, transformationMatrix[1] * 45.0
-                )
+            transformation = Affine(
+                transformationMatrix[0],
+                transformationMatrix[1],
+                transformationMatrix[4],
+                transformationMatrix[2],
+                transformationMatrix[3],
+                transformationMatrix[5],
             )
             x, y = (node.position.x, node.position.y) * transformation
             node.position.x = x
@@ -2073,7 +2101,7 @@ class segment(list):
                 + (3 * mt * t * t * x2)
                 + (t * t * t * x3)
             )
-            if len(xvalues) > 0:
+            if len(xvalues) > j:
                 xvalues[j] = newxValue
             else:
                 xvalues.append(newxValue)
@@ -2083,7 +2111,7 @@ class segment(list):
                 + (3 * mt * t * t * y2)
                 + (t * t * t * y3)
             )
-            if len(yvalues) > 0:
+            if len(yvalues) > j:
                 yvalues[j] = newyValue
             else:
                 yvalues.append(newyValue)
@@ -3007,8 +3035,8 @@ class GSLayer(GSBase):
         "leftMetricsKey": None,
         "rightMetricsKey": None,
         "widthMetricsKey": None,
-        "vertWidth": 0,
-        "vertOrigin": 0,
+        "vertWidth": None,
+        "vertOrigin": None,
     }
     _wrapperKeysTranslate = {"guideLines": "guides", "background": "_background"}
     _keyOrder = (
@@ -3534,7 +3562,9 @@ class GSFont(GSBase):
         "DisplayStrings",
         "_classes",
         "_customParameters",
+        "_featurePrefixes",
         "_features",
+        "_customParameters",
         "_glyphs",
         "_instances",
         "_kerning",
@@ -3549,7 +3579,6 @@ class GSFont(GSBase):
         "disablesAutomaticAlignment",
         "disablesNiceNames",
         "familyName",
-        "featurePrefixes",
         "filepath",
         "grid",
         "gridSubDivisions",
@@ -3599,6 +3628,8 @@ class GSFont(GSBase):
     }
     _defaultsForName = {
         "classes": [],
+        "features": [],
+        "featurePrefixes": [],
         "customParameters": [],
         "disablesAutomaticAlignment": False,
         "disablesNiceNames": False,
@@ -3611,7 +3642,6 @@ class GSFont(GSBase):
 
     def __init__(self, path=None):
         self.DisplayStrings = ""
-        self._features = []
         self._glyphs = []
         self._instances = []
         self._masters = []
@@ -3619,6 +3649,8 @@ class GSFont(GSBase):
         self._versionMinor = 0
         self.appVersion = "895"  # minimum required version
         self.classes = copy.deepcopy(self._defaultsForName["classes"])
+        self.features = copy.deepcopy(self._defaultsForName["features"])
+        self.featurePrefixes = copy.deepcopy(self._defaultsForName["featurePrefixes"])
         self.copyright = ""
         self.customParameters = copy.deepcopy(self._defaultsForName["customParameters"])
         self.date = None
@@ -3629,7 +3661,6 @@ class GSFont(GSBase):
         ]
         self.disablesNiceNames = self._defaultsForName["disablesNiceNames"]
         self.familyName = "Unnamed font"
-        self.featurePrefixes = []
         self.filepath = None
         self.grid = self._defaultsForName["gridLength"]
         self.gridSubDivisions = self._defaultsForName["gridSubDivision"]
@@ -3699,18 +3730,6 @@ class GSFont(GSBase):
             ):
                 glyph._setupLayer(layer, layer.layerId)
 
-    @property
-    def features(self):
-        return self._features
-
-    @features.setter
-    def features(self, value):
-        # FIXME: (jany) why not use Proxy like every other attribute?
-        # FIXME: (jany) do the same for featurePrefixes?
-        self._features = value
-        for g in self._features:
-            g._parent = self
-
     masters = property(
         lambda self: FontFontMasterProxy(self),
         lambda self, value: FontFontMasterProxy(self).setter(value),
@@ -3736,6 +3755,16 @@ class GSFont(GSBase):
     classes = property(
         lambda self: FontClassesProxy(self),
         lambda self, value: FontClassesProxy(self).setter(value),
+    )
+
+    features = property(
+        lambda self: FontFeaturesProxy(self),
+        lambda self, value: FontFeaturesProxy(self).setter(value),
+    )
+
+    featurePrefixes = property(
+        lambda self: FontFeaturePrefixesProxy(self),
+        lambda self, value: FontFeaturePrefixesProxy(self).setter(value),
     )
 
     customParameters = property(
