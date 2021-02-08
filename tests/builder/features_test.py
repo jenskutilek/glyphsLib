@@ -141,8 +141,6 @@ def test_feature_names(tmpdir, ufo_module):
     ufo = ufo_module.Font()
     ufo.features.text = dedent(
         """\
-        # notes:
-        # Name: Alternate g
         feature ss01 {
         featureNames {
           name "Alternate g";
@@ -182,7 +180,6 @@ def test_feature_names_notes(tmpdir, ufo_module):
         """\
         feature ss01 {
         # notes:
-        # Name: Alternate g
         # foo
         featureNames {
           name "Alternate g";
@@ -206,7 +203,6 @@ def test_feature_names_notes(tmpdir, ufo_module):
         """\
         feature ss01 {
         # notes:
-        # Name: Alternate g
         # foo
         featureNames {
           name "Alternate g";
